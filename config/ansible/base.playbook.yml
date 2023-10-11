@@ -1,0 +1,166 @@
+---
+- name: Pre-Tasks
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Ensure Ansible roles/collections are installed
+      local_action:
+        module: community.general.ansible_galaxy_install
+        type: both
+        requirements_file: requirements.yml
+
+    - name: Check if config/variable files are present
+      local_action:
+        module: stat
+        path: "{{ playbook_dir }}/{{ item }}"
+      loop:
+        - ansible.cfg
+        - hosts.ini
+        - "{{ group_names[0] }}.known_hosts"
+      register: result
+      failed_when: not result.stat.exists
+
+    - name: Ensure SSH connection is available
+      wait_for_connection:
+
+- name: Ensure system is ready, up-to-date, and dependencies are installed
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure apt is responsive
+      shell: |
+        while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+          sleep 5
+          echo "lock detected"
+        done
+      register: apt_lock_result
+      changed_when: "'lock detected' in apt_lock_result.stdout_lines"
+
+    - name: Ensure system is up-to-date
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoclean: yes
+        autoremove: yes
+      register: apt_result
+
+    - name: Reboot if system was updated
+      reboot:
+      when: apt_result.changed
+
+    - name: Ensure packages are installed
+      apt:
+        pkg:
+          - git
+
+- name: Ensure Docker is installed
+  hosts: all
+  become: yes
+  vars:
+    docker_install_compose_plugin: true
+    docker_install_compose: false
+    docker_users:
+      - ubuntu
+  roles:
+    - geerlingguy.docker
+
+- name: Setup application
+  hosts: all
+  tags:
+    - deploy
+  tasks:
+    - name: Pass application repository deploy key from controller to host
+      copy:
+        src: "{{ deploy_key_pvt }}"
+        dest: "/tmp/deploy_key"
+        mode: "0600"
+
+    - name: Clone private repository
+      git:
+        repo: "git@github.com:dnk8n/dtrack.git"
+        dest: "/home/ubuntu/dtrack"
+        version: "HEAD"
+        accept_hostkey: yes
+        key_file: "/tmp/deploy_key"
+
+    - name: Remove deploy key from host
+      file:
+        path: "/tmp/deploy_key"
+        state: absent
+
+    - name: Create symlink for prod environment
+      file:
+        src: "/home/ubuntu/dtrack/config/docker-compose.overrides/{{ override }}.yaml"
+        dest: "/home/ubuntu/dtrack/docker-compose.override.yaml"
+        state: link
+
+    - name: Create .env file
+      copy:
+        content: |
+          # Variables for docker-compose.overide.yaml
+          TRAEFIK_BASICAUTH={{ traefik_basicauth }}
+          HOST={{ inventory_hostname }}
+          ACME_EMAIL={{ acme_email }}
+          # Initial proveleged Postgres DB and superuser credentials
+          POSTGRES_DB=postgres
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD={{ postgres_password_superuser }}
+          # APP Postgres DB and credentials
+          POSTGRES_DB_APP=dtrack
+          POSTGRES_USER_APP=authenticator
+          POSTGRES_PASSWORD_APP={{ postgres_password_app }}
+          # Admin Postgres Credentials
+          POSTGRES_USER_APP_ADMIN=admin
+          POSTGRES_PASSWORD_APP_ADMIN={{ postgres_password_app_admin }}
+          POSTGRES_USER_APP_POWER={{ postgres_user_app_power }}
+          # Azure Creds
+          AZURE_TENANT_ID={{ azure_tenant_id }}
+          AZURE_CLIENT_ID={{ azure_client_id }}
+          # PostgREST settings
+          PGRST_DB_ANON_ROLE=anon
+          PGRST_JWT_ROLE_CLAIM_KEY=.preferred_username
+          # React Admin settings
+          PALETTE_PRIMARY=#330808
+          PALETTE_SECONDARY=#A32122
+        dest: "/home/ubuntu/dtrack/.env"
+
+    - name: Ensure directory 'keys' exists
+      file:
+        path: "/home/ubuntu/dtrack/keys"
+        state: directory
+        mode: "0755"
+
+    - name: Execute script if on prod
+      command:
+        cmd: ./rotate-keys.sh
+        chdir: "/home/ubuntu/dtrack"
+      when: "'prod' in group_names"
+
+    - name: Build services with Docker Compose
+      command:
+        cmd: docker compose build --pull
+        chdir: "/home/ubuntu/dtrack"
+      async: 600
+      poll: 0
+      register: build
+
+    - name: Poll potentially long-running build
+      async_status:
+        jid: "{{ build.ansible_job_id }}"
+      register: poll
+      until: poll.finished
+      retries: 60
+      delay: 10
+
+    - name: Reinitialize DB
+      command:
+        cmd: "{{ item }}"
+        chdir: "/home/ubuntu/dtrack"
+      with_items:
+        - docker compose down -v
+        - ./initdb.sh
+
+    - name: Start all services
+      command:
+        cmd: docker compose up -d
+        chdir: "/home/ubuntu/dtrack"

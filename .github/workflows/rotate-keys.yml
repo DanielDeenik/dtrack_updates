@@ -1,0 +1,31 @@
+name: Rotate Keys
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  rotate_keys:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setting up SSH key and known hosts
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.HOST_KEY }}
+          HOST_KEY_TEST: ${{ secrets.HOST_KEY_TEST }}
+        run: |
+          echo "$PRIVATE_KEY" > private_key
+          chmod 600 private_key
+          echo "$HOST_KEY" >> known_hosts
+          echo "$HOST_KEY_TEST" >> known_hosts
+
+      - name: Run Ansible Playbook (Rotate Keys)
+        run: ansible-playbook -v .github/ansible/rotate-keys-playbook.yml -i .github/ansible/hosts.ini
+
+      - name: Cleanup SSH Key and known hosts
+        if: always()
+        run: rm -f private_key known_hosts

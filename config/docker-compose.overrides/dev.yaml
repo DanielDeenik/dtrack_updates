@@ -1,0 +1,33 @@
+version: "3"
+
+services:
+  postgres:
+    ports:
+      - published: 5432
+        target: 5432
+    volumes:
+      - ./dtrack/dev:/develop
+
+  postgrest:
+    environment:
+      PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:3000
+      PGRST_DB_PLAN_ENABLED: "true"
+    ports:
+      - published: 3000
+        target: 3000
+
+  react-admin:
+    build:
+      args:
+        VITE_APP_BASE_URI: http://localhost:5174
+        VITE_API_BASE_URI: http://localhost:3000
+    ports:
+      - published: 5174
+        target: 80
+
+  swagger:
+    environment:
+      URLS: '[ { url: "http://localhost:3000", name: "VRMT" } ]'
+    ports:
+      - published: 8080
+        target: 8080

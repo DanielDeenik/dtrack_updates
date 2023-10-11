@@ -1,0 +1,28 @@
+# Variables for docker-compose.overide.yaml
+TRAEFIK_BASICAUTH=admin:$2y$10$bEIJAkNc8Qf.ryLijVzRSeE9jto9AuwBpUDNQ.IcXSwlH7G5lHlmi  # htpasswd -bnBC 10 "" xyz | tr -d ':\n'
+HOST=dtrack.example.com
+ACME_PROVIDER=cloudflare
+CF_API_EMAIL=an@example.com
+CF_API_KEY=dummy
+ACME_EMAIL=an@example.com
+# Initial proveleged Postgres DB and superuser credentials
+POSTGRES_DB=postgres
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=dummy
+# APP Postgres DB and credentials
+POSTGRES_DB_APP=dtrack
+POSTGRES_USER_APP=authenticator
+POSTGRES_PASSWORD_APP=dummy
+# APP Admin Postgres Credentials
+POSTGRES_USER_APP_ADMIN=admin
+POSTGRES_PASSWORD_APP_ADMIN=dummy
+POSTGRES_USER_APP_POWER=Dummy.User@example.com
+# Azure Creds
+AZURE_TENANT_ID=dummy
+AZURE_CLIENT_ID=dummy
+# PostgREST settings
+PGRST_DB_ANON_ROLE=anon
+PGRST_JWT_ROLE_CLAIM_KEY=.preferred_username
+# React Admin settings
+PALETTE_PRIMARY=#330808
+PALETTE_SECONDARY=#A32122

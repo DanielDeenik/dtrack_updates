@@ -1,0 +1,10 @@
+.env
+docker-compose.override.yaml
+.project
+.dbeaver
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+backend.tfconf
+keys

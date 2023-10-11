@@ -1,0 +1,91 @@
+.RaTabbedShowLayout-content {
+  padding: 8px 16px 0px 16px !important;
+}
+
+.MuiBox-root {
+  padding: 0px 0px 0px 0px !important;
+}
+
+.chart-container-dashboard {
+  padding: 8px 0px 0px 0px !important;
+}
+
+.chart-container {
+  display: flex;
+  padding: 0px 0px 0px 0px;
+}
+
+.chart-left {
+  flex: 1;
+}
+
+.chart {
+  flex: 1;
+  position: relative;
+  aspect-ratio: 1/1;
+  padding: 0px 0px 0px 0px;
+}
+
+.chart-download-button {
+  position: absolute !important;
+  min-width: 24px !important;
+  top: 0px !important;
+  right: 0px !important;
+  padding: 0px 0px 0px 0px !important;
+}
+
+.chart-right {
+  flex: 1;
+  height: 100vh;
+}
+
+@media (orientation: landscape) {
+  .chart-container {
+    flex-direction: row;
+    height: 100vh;
+  }
+
+  .chart-left {
+    order: 1;
+    height: 100vh;
+  }
+
+  .chart {
+    order: 2;
+    height: 100vh;
+  }
+
+  .chart-right {
+    order: 3;
+    height: 100vh;
+  }
+}
+
+@media (orientation: portrait) {
+  .chart-container {
+    flex-direction: column;
+    width: 100vw;
+  }
+
+  .chart-left {
+    order: 1;
+    width: 100vw;
+  }
+  .chart-right {
+    order: 2;
+    width: 100vw;
+  }
+
+  .chart {
+    order: 3;
+    width: 100vw;
+  }
+}
+
+.total-hours {
+  font-family: Roboto;
+  font-weight: 900;
+  font-size: 24px;
+  fill: #808080;
+  /* fill: #d32f2f; */
+}

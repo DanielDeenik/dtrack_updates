@@ -1,0 +1,80 @@
+---
+- hosts: prod_server
+  vars:
+    repo_dir: /home/ubuntu/dtrack
+    backup_base_dir: /home/ubuntu/backups
+    retention_periods:
+      manually: 1
+      monthly: 200
+      weekly: 35
+      daily: 15
+      bihourly: 10
+  tasks:
+    - name: Get the current UTC date and time
+      set_fact:
+        current_utc_date: "{{ lookup('pipe', 'date --utc +%Y%m%dT%H%M%S') }}"
+        day_of_month: "{{ lookup('pipe', 'date --utc +%d') }}"
+        hour_of_day: "{{ lookup('pipe', 'date --utc +%H') }}"
+        day_of_week: "{{ lookup('pipe', 'date --utc +%A') }}"
+
+    - name: Determine the backup period
+      set_fact:
+        backup_period: "{% if run_mode is defined and run_mode == 'manual' %}manually{% elif day_of_month == '01' and hour_of_day == '00' %}monthly{% elif day_of_week == 'Sunday' and hour_of_day == '00' %}weekly{% elif hour_of_day == '00' %}daily{% else %}bihourly{% endif %}"
+
+    - name: Determine the backups directory
+      set_fact:
+        backups_dir: "{{ backup_base_dir }}/{{ backup_period }}"
+
+    - name: Determine the current backup directory
+      set_fact:
+        backup_dir: "{{ backup_base_dir }}/{{ backup_period }}/{{ current_utc_date }}"
+
+    - name: Calculate retention days for current backup period
+      set_fact:
+        retention_days: "{{ retention_periods[backup_period] }}"
+
+    - name: Execute backup commands against postgres container
+      command:
+        cmd: "docker compose exec -T postgres {{ item }}"
+        chdir: "{{ repo_dir }}"
+      with_items:
+        - rm -rf /tmp/dtrack.dump /tmp/cyanaudit
+        - pg_dump -U admin -Fc --exclude-schema cyanaudit --data-only -f /tmp/dtrack.dump dtrack
+        - bash -c 'mkdir -p /tmp/cyanaudit && /opt/cyanaudit/tools/cyanaudit_dump.pl -h localhost -U postgres -d dtrack /tmp/cyanaudit/'
+
+    - name: Empty/recreate remote backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: "{{ item }}"
+      with_items:
+        - absent
+        - directory
+
+    - name: Copy backup files from postgres container to remote backup directory
+      command:
+        cmd: "docker compose cp postgres:/tmp/{{ item }} {{ backup_dir }}"
+        chdir: "{{ repo_dir }}"
+      with_items:
+        - dtrack.dump
+        - cyanaudit
+
+    - name: Archive the backup directory
+      archive:
+        path: "{{ backup_dir }}/"
+        dest: "/tmp/{{ current_utc_date }}.tar"
+        format: tar
+      register: archive_result
+
+    - name: Fetch backup archive from server
+      fetch:
+        src: "{{ archive_result.dest }}"
+        dest: /tmp/backup/
+        flat: yes
+
+    - name: Remove temporary backup archive on server
+      file:
+        path: "{{ archive_result.dest }}"
+        state: absent
+
+    - name: Remove expired backups
+      command: "find {{ backups_dir }} -type d -mtime +{{ retention_days }} -exec rm -rf {} +"

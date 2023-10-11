@@ -1,0 +1,12 @@
+---
+- hosts:
+    - prod_server
+    - test_server
+  vars:
+    repo_dir: /home/ubuntu/dtrack
+  tasks:
+    - name: Rotate keys
+      command:
+        cmd: ./rotate-keys.sh
+        chdir: "{{ repo_dir }}"
+      become: true

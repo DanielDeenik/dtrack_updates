@@ -1,0 +1,66 @@
+version: "3"
+
+services:
+  postgres:
+    build:
+      context: ./config/dockerfiles/postgres
+      dockerfile: ./Dockerfile
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      net: {}
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  postgrest:
+    depends_on:
+      - postgres
+    environment:
+      # https://postgrest.org/en/stable/configuration.html
+      PGRST_APP_SETTINGS_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      PGRST_APP_SETTINGS_AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      PGRST_DB_ANON_ROLE: ${PGRST_DB_ANON_ROLE}
+      PGRST_DB_PRE_REQUEST: pre.request
+      PGRST_DB_SCHEMA: api
+      PGRST_DB_URI: postgres://${POSTGRES_USER_APP}:${POSTGRES_PASSWORD_APP}@postgres:5432/${POSTGRES_DB_APP}
+      PGRST_JWT_ROLE_CLAIM_KEY: ${PGRST_JWT_ROLE_CLAIM_KEY}
+      PGRST_JWT_SECRET: "@/config/jwt-secret"
+      PGRST_OPENAPI_MODE: ignore-privileges
+      PGRST_OPENAPI_SECURITY_ACTIVE: "true"
+    image: postgrest/postgrest:v10.1.2
+    networks:
+      net: {}
+    restart: unless-stopped
+    volumes:
+      - ./keys/jwt-secret:/config/jwt-secret:rw
+
+  react-admin:
+    build:
+      context: ./dtrack/ui
+      dockerfile: ../../config/dockerfiles/react-admin/Dockerfile
+      args:
+        VITE_MSAL_CLIENT_ID: ${AZURE_CLIENT_ID}
+        VITE_MSAL_AUTHORITY: https://login.microsoftonline.com/${AZURE_TENANT_ID}
+        VITE_PALETTE_PRIMARY: ${PALETTE_PRIMARY}
+        VITE_PALETTE_SECONDARY: ${PALETTE_SECONDARY}
+    networks:
+      net: {}
+    restart: unless-stopped
+
+  swagger:
+    depends_on:
+      - postgrest
+    image: swaggerapi/swagger-ui:v4.18.1
+    networks:
+      net: {}
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  net:

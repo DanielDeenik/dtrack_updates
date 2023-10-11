@@ -1,0 +1,112 @@
+---
+- hosts: test_server
+  vars:
+    repo_dir: /home/ubuntu/dtrack
+    tmp_backup: /tmp/backup
+  tasks:
+    - name: Empty/recreate remote backup directory
+      file:
+        path: "{{ tmp_backup }}"
+        state: "{{ item }}"
+      with_items:
+        - absent
+        - directory
+
+    - name: Find the tar file locally
+      local_action: "command find {{ tmp_backup }} -name '*.tar' -type f -print -quit"
+      register: local_tar
+
+    - name: Check the tar file was found
+      fail:
+        msg: No tar file found
+      when: local_tar.stdout == ""
+
+    - name: Copy the tar file to remote
+      copy:
+        src: "{{ local_tar.stdout }}"
+        dest: /tmp/
+      register: remote_tar
+
+    - name: Unarchive the tar on remote
+      unarchive:
+        src: "{{ remote_tar.dest }}"
+        dest: "{{ tmp_backup }}/"
+        remote_src: true
+
+    - name: Navigate to project directory and pull latest changes
+      git:
+        repo: git@github.com:Wakoma/dtrack.git
+        dest: "{{ repo_dir }}"
+        version: main
+        force: true
+
+    - name: Build services with Docker Compose
+      command:
+        cmd: docker compose build --pull
+        chdir: "{{ repo_dir }}"
+      async: 600
+      poll: 0
+      register: build
+
+    - name: Poll potentially long-running build
+      async_status:
+        jid: "{{ build.ansible_job_id }}"
+      register: poll
+      until: poll.finished
+      retries: 60
+      delay: 10
+
+    - name: Reinitialize DB
+      command:
+        cmd: "{{ item }}"
+        chdir: "{{ repo_dir }}"
+      with_items:
+        - docker compose down -v
+        - ./initdb.sh
+
+    - name: Start postgres service
+      command:
+        cmd: docker compose up -d postgres
+        chdir: "{{ repo_dir }}"
+
+    - name: Copy scripts/files to postgres container
+      command:
+        cmd: "docker compose cp {{ item }} postgres:/tmp/"
+        chdir: "{{ repo_dir }}"
+      with_items:
+        - "{{ tmp_backup }}/dtrack.dump"
+        - "{{ tmp_backup }}/cyanaudit"
+        - "{{ repo_dir }}/dtrack/dev/queries/post-restore.sql"
+
+    - name: Cleanup the tar file on remote
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ tmp_backup }}"
+        - "{{ remote_tar.dest }}"
+
+    - name: Wait for postgres service to be ready
+      command:
+        cmd: docker compose exec -T postgres pg_isready -U postgres
+        chdir: "{{ repo_dir }}"
+      register: pg_isready
+      until: pg_isready.rc == 0
+      retries: 30
+      delay: 2
+      failed_when: pg_isready.rc not in [0, 2]
+      changed_when: false
+
+    - name: Execute restore commands against postgres container
+      command:
+        cmd: "docker compose exec -T postgres {{ item }}"
+        chdir: "{{ repo_dir }}"
+      with_items:
+        - pg_restore -U postgres --disable-triggers --no-owner --data-only -d dtrack /tmp/dtrack.dump
+        - bash -c '/opt/cyanaudit/tools/cyanaudit_restore.pl -h localhost -U postgres -d dtrack /tmp/cyanaudit/*.csv.gz'
+        - psql -U admin -d dtrack -a -f /tmp/post-restore.sql
+
+    - name: Start all services
+      command:
+        cmd: docker compose up -d
+        chdir: "{{ repo_dir }}"
