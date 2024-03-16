@@ -8,3 +8,5 @@ terraform.tfstate.backup
 terraform.tfvars
 backend.tfconf
 keys
+*.tar
+venv/
