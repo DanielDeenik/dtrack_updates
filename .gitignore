@@ -10,3 +10,4 @@ backend.tfconf
 keys
 *.tar
 venv/
+backup/
