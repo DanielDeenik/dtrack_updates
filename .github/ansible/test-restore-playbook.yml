@@ -1,8 +1,10 @@
 ---
 - hosts: test_server
   vars:
+    repo: git@github.com:dnk8n/dtrack.git
     repo_dir: /home/ubuntu/dtrack
     tmp_backup: /tmp/backup
+    tmp_backup_src: /tmp/backup
   tasks:
     - name: Empty/recreate remote backup directory
       file:
@@ -13,7 +15,7 @@
         - directory
 
     - name: Find the tar file locally
-      local_action: "command find {{ tmp_backup }} -name '*.tar' -type f -print -quit"
+      local_action: "command find {{ tmp_backup_src }} -name '*.tar' -type f -print -quit"
       register: local_tar
 
     - name: Check the tar file was found
@@ -35,7 +37,7 @@
 
     - name: Navigate to project directory and pull latest changes
       git:
-        repo: git@github.com:Wakoma/dtrack.git
+        repo: "{{ repo }}"
         dest: "{{ repo_dir }}"
         version: main
         force: true

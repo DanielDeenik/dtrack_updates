@@ -1,5 +1,5 @@
 # Variables for docker-compose.overide.yaml
-TRAEFIK_BASICAUTH=admin:$2y$10$bEIJAkNc8Qf.ryLijVzRSeE9jto9AuwBpUDNQ.IcXSwlH7G5lHlmi  # htpasswd -bnBC 10 "" xyz | tr -d ':\n'
+TRAEFIK_BASICAUTH=  # htpasswd -bnBC 10 "" xyz | tr -d ':\n'
 HOST=dtrack.example.com
 ACME_PROVIDER=cloudflare
 CF_API_EMAIL=an@example.com
